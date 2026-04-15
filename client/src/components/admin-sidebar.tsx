@@ -8,7 +8,9 @@ import {
   LogOut,
   Shield,
   ChevronDown,
+  Settings2,
 } from "lucide-react";
+import { OrbitLogo } from "@/components/orbit-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -37,6 +39,7 @@ const adminNavItems = [
   { title: "Staff", url: "/admin/staff", icon: Users },
   { title: "Plans", url: "/admin/plans", icon: Package },
   { title: "Subscriptions", url: "/admin/subscriptions", icon: CreditCard },
+  { title: "Configuration", url: "/admin/config", icon: Settings2 },
 ];
 
 export function AdminSidebar() {
@@ -56,13 +59,8 @@ export function AdminSidebar() {
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-destructive">
-            <Shield className="w-5 h-5 text-destructive-foreground" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold tracking-tight">SkyRich Orbit</span>
-            <span className="text-xs text-muted-foreground">Platform Admin</span>
-          </div>
+          <OrbitLogo size="sm" />
+          <span className="ml-1 text-[10px] font-bold uppercase tracking-widest text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">Admin</span>
         </div>
       </SidebarHeader>
       <SidebarSeparator />

@@ -1,8 +1,15 @@
-# SkyRich Orbit CRM
+# Orbit CRM
 
 ## Overview
 
-SkyRich Orbit CRM is a multi-tenant SaaS CRM platform for SMEs, offering lead, contact, deal management, task tracking, and analytics. It ensures data isolation, role-based access, and supports theming. Built as a full-stack TypeScript monorepo with React and Express, its vision is to provide a scalable, user-friendly CRM to streamline sales, improve customer relations, and drive SME growth, aiming for a significant market share with a feature-rich, competitively priced platform focused on UX and data security.
+Orbit CRM (by SkyRich Tech Solutions Pte Ltd) is a multi-tenant SaaS CRM platform for SMEs, offering lead, contact, deal management, task tracking, and analytics. It ensures data isolation, role-based access, and supports theming. Built as a full-stack TypeScript monorepo with React and Express, its vision is to provide a scalable, user-friendly CRM to streamline sales, improve customer relations, and drive SME growth, aiming for a significant market share with a feature-rich, competitively priced platform focused on UX and data security.
+
+### Brand Identity
+- **Logo**: "Orbit CRM" text with gradient (rose-500 → red-400 → orange-500) on "CRM", orbital SVG icon in gradient pill.
+- **Primary Color**: HSL 2 76% 44% (rose/red), replacing previous blue (217 91% 35%).
+- **Font**: Inter (sans-serif).
+- **Logo Component**: `client/src/components/orbit-logo.tsx` — reusable `OrbitLogo` component with variants (default, dark, mono, icon-only) and sizes (sm, md, lg, xl).
+- **Branding applied to**: Landing page, login, register, app sidebar, admin sidebar, HTML title.
 
 ## User Preferences
 
@@ -36,7 +43,7 @@ Preferred communication style: Simple, everyday language.
 - Session stores `userId` and `companyId`.
 
 ### Database Schema (PostgreSQL via Drizzle ORM)
-- Key tables include `companies`, `users`, `leads`, `contacts`, `deals`, `activities`, `tasks`, and tables for subscriptions, payments, AI features, WhatsApp integration, and dynamic module/feature control.
+- Key tables include `companies`, `users`, `leads`, `contacts`, `deals`, `activities`, `tasks`, and tables for subscriptions, payments, AI features, WhatsApp integration, dynamic module/feature control, `platform_settings`, `notification_channels`, `company_email_settings`, and `system_notifications`.
 
 ### Platform Super Admin
 - Dedicated `super_admin` role with access to `/api/admin/*` routes for managing tenants, plans, subscriptions, and staff.
@@ -44,7 +51,14 @@ Preferred communication style: Simple, everyday language.
 - **Tenant Management**: Full CRUD with add/edit/archive/restore. Archive = soft delete (sets `isArchived=true`, `archivedAt` timestamp). Tenant creation requires a plan selection. Archived tenants cannot log in.
 - **Staff Management**: Super admin can create staff members for any tenant, assign roles (company_admin, sales_manager, sales_executive), and toggle granular permissions (manage_leads, manage_contacts, etc.). Staff can be activated/deactivated. Deactivated users cannot log in.
 - **Plan Management**: Upgrade/downgrade tenant subscription plans, change billing cycle, update status from admin panel.
-- Admin pages: `/admin` (dashboard), `/admin/tenants`, `/admin/staff`, `/admin/plans`, `/admin/subscriptions`.
+- **Configuration Center** (`/admin/config`): Tabbed interface for platform-wide settings management:
+  - **Payment Gateways**: Stripe & Razorpay API key config, mode (test/live), webhook secrets. Secrets masked in API responses.
+  - **Notifications**: Enable/disable notification channels (Email, SMS, WhatsApp, Push), configure providers.
+  - **System Email**: Platform-level SMTP settings for system emails (password resets, alerts).
+  - **System Alerts**: Create/delete system-wide notifications sent to all or specific tenants, with type (info/warning/error/maintenance/success) and optional expiration.
+  - **Client Email**: View email limits per plan, email usage per company, and configure per-tenant SMTP settings.
+- **Client Email Settings (Tenant)**: Company admins can configure their own SMTP settings via the Settings page (`/settings`) — Email Settings section with SMTP host/port/username/password/from address/name, usage counter.
+- Admin pages: `/admin` (dashboard), `/admin/tenants`, `/admin/staff`, `/admin/plans`, `/admin/subscriptions`, `/admin/config`.
 
 ### API Routes
 - Comprehensive CRUD operations for CRM entities (leads, contacts, deals, tasks, settings).

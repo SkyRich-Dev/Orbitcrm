@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Settings, Palette, Building2, Shield, Brain, Zap, Pencil, Blocks, Package, Lock, CheckCircle2, Globe, Paintbrush, Home, Check, X, Loader2 } from "lucide-react";
+import { Settings, Palette, Building2, Shield, Brain, Zap, Pencil, Blocks, Package, Lock, CheckCircle2, Globe, Paintbrush, Home, Check, X, Loader2, Mail, Send } from "lucide-react";
 import type { Company, PipelineStage, AiSettings, BrandingSettings, HomepageSettings } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -909,6 +909,8 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {isAdmin && <ClientEmailSettingsSection />}
+
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
@@ -936,5 +938,168 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function ClientEmailSettingsSection() {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+
+  const { data: emailSettings, isLoading } = useQuery<{
+    id?: number;
+    companyId?: number;
+    enabled: boolean;
+    smtpHost: string | null;
+    smtpPort: number | null;
+    smtpUsername: string | null;
+    smtpPassword: string | null;
+    fromAddress: string | null;
+    fromName: string | null;
+    encryption: string | null;
+    emailsSentThisMonth: number;
+  }>({
+    queryKey: ["/api/company/email-settings"],
+  });
+
+  const [form, setForm] = useState({
+    enabled: false, smtpHost: "", smtpPort: 587, smtpUsername: "", smtpPassword: "",
+    fromAddress: "", fromName: "", encryption: "tls",
+  });
+
+  useEffect(() => {
+    if (emailSettings) {
+      setForm({
+        enabled: emailSettings.enabled ?? false,
+        smtpHost: emailSettings.smtpHost || "",
+        smtpPort: emailSettings.smtpPort || 587,
+        smtpUsername: emailSettings.smtpUsername || "",
+        smtpPassword: "",
+        fromAddress: emailSettings.fromAddress || "",
+        fromName: emailSettings.fromName || "",
+        encryption: emailSettings.encryption || "tls",
+      });
+    }
+  }, [emailSettings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload = { ...form };
+      if (!payload.smtpPassword) {
+        const { smtpPassword, ...rest } = payload as any;
+        await apiRequest("PUT", "/api/company/email-settings", rest);
+      } else {
+        await apiRequest("PUT", "/api/company/email-settings", payload);
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Email settings updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/email-settings"] });
+      setEditing(false);
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update email settings", variant: "destructive" }),
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <Skeleton className="h-6 w-48" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Mail className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-semibold">Email Settings (SMTP)</h3>
+          </div>
+          {!editing && (
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)} data-testid="button-edit-email-settings">
+              <Pencil className="w-3 h-3 mr-1" /> Configure
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {!editing ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Badge variant={emailSettings?.enabled ? "default" : "secondary"} data-testid="badge-email-status">
+                {emailSettings?.enabled ? "Enabled" : "Not Configured"}
+              </Badge>
+              {emailSettings?.smtpHost && (
+                <span className="text-xs text-muted-foreground">via {emailSettings.smtpHost}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-4 text-sm">
+              <div>
+                <span className="text-xs text-muted-foreground">Emails Sent This Month</span>
+                <p className="font-semibold flex items-center gap-1" data-testid="text-emails-sent">
+                  <Send className="w-3 h-3" /> {emailSettings?.emailsSentThisMonth ?? 0}
+                </p>
+              </div>
+              {emailSettings?.fromAddress && (
+                <div>
+                  <span className="text-xs text-muted-foreground">From</span>
+                  <p className="font-medium text-sm" data-testid="text-from-address">{emailSettings.fromAddress}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Switch checked={form.enabled} onCheckedChange={(v) => setForm({ ...form, enabled: v })}
+                data-testid="switch-email-enabled" />
+              <Label>Enable Custom SMTP</Label>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs">SMTP Host</Label>
+                <Input value={form.smtpHost} onChange={(e) => setForm({ ...form, smtpHost: e.target.value })}
+                  placeholder="smtp.gmail.com" data-testid="input-email-smtp-host" />
+              </div>
+              <div>
+                <Label className="text-xs">Port</Label>
+                <Input type="number" value={form.smtpPort} onChange={(e) => setForm({ ...form, smtpPort: parseInt(e.target.value) || 587 })}
+                  data-testid="input-email-smtp-port" />
+              </div>
+              <div>
+                <Label className="text-xs">Username</Label>
+                <Input value={form.smtpUsername} onChange={(e) => setForm({ ...form, smtpUsername: e.target.value })}
+                  placeholder="user@domain.com" data-testid="input-email-smtp-user" />
+              </div>
+              <div>
+                <Label className="text-xs">Password</Label>
+                <Input type="password" value={form.smtpPassword} onChange={(e) => setForm({ ...form, smtpPassword: e.target.value })}
+                  placeholder={emailSettings?.smtpPassword ? "••••••••" : "SMTP password"} data-testid="input-email-smtp-pass" />
+              </div>
+              <div>
+                <Label className="text-xs">From Address</Label>
+                <Input value={form.fromAddress} onChange={(e) => setForm({ ...form, fromAddress: e.target.value })}
+                  placeholder="noreply@company.com" data-testid="input-email-from-addr" />
+              </div>
+              <div>
+                <Label className="text-xs">From Name</Label>
+                <Input value={form.fromName} onChange={(e) => setForm({ ...form, fromName: e.target.value })}
+                  placeholder="Company Name" data-testid="input-email-from-name" />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setEditing(false)} data-testid="button-cancel-email">Cancel</Button>
+              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}
+                data-testid="button-save-email-settings">
+                {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                Save Email Settings
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

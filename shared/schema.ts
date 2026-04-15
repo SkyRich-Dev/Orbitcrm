@@ -512,7 +512,94 @@ export type PlanLimits = {
   max_deals?: number;
   max_storage_mb?: number;
   monthly_ai_usage?: number;
+  monthly_emails?: number;
 };
+
+export type SmtpSettings = {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  fromAddress: string;
+  fromName: string;
+  encryption: "none" | "tls" | "ssl";
+};
+
+export type NotificationChannelConfig = {
+  enabled: boolean;
+  provider?: string;
+  apiKey?: string;
+  apiSecret?: string;
+  senderId?: string;
+  webhookUrl?: string;
+  extraConfig?: Record<string, string>;
+};
+
+export type PlatformSettingsMap = Record<string, string>;
+
+export const platformSettings = pgTable("platform_settings", {
+  id: serial("id").primaryKey(),
+  settingKey: text("setting_key").notNull().unique(),
+  settingValue: text("setting_value").notNull(),
+  category: text("category").notNull(),
+  label: text("label"),
+  isSecret: boolean("is_secret").default(false).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const notificationChannels = pgTable("notification_channels", {
+  id: serial("id").primaryKey(),
+  channel: text("channel").notNull().unique(),
+  label: text("label").notNull(),
+  enabled: boolean("enabled").default(false).notNull(),
+  provider: text("provider"),
+  config: jsonb("config").$type<NotificationChannelConfig>(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const companyEmailSettings = pgTable("company_email_settings", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companies.id).notNull().unique(),
+  enabled: boolean("enabled").default(false).notNull(),
+  smtpHost: text("smtp_host"),
+  smtpPort: integer("smtp_port").default(587),
+  smtpUsername: text("smtp_username"),
+  smtpPassword: text("smtp_password"),
+  fromAddress: text("from_address"),
+  fromName: text("from_name"),
+  encryption: text("encryption").default("tls"),
+  emailsSentThisMonth: integer("emails_sent_this_month").default(0).notNull(),
+  monthResetDate: timestamp("month_reset_date").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const systemNotifications = pgTable("system_notifications", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull().default("info"),
+  targetAudience: text("target_audience").notNull().default("all"),
+  targetCompanyId: integer("target_company_id").references(() => companies.id),
+  isActive: boolean("is_active").default(true).notNull(),
+  expiresAt: timestamp("expires_at"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPlatformSettingSchema = createInsertSchema(platformSettings).omit({ id: true, updatedAt: true });
+export const insertNotificationChannelSchema = createInsertSchema(notificationChannels).omit({ id: true, updatedAt: true });
+export const insertCompanyEmailSettingsSchema = createInsertSchema(companyEmailSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSystemNotificationSchema = createInsertSchema(systemNotifications).omit({ id: true, createdAt: true });
+
+export type PlatformSetting = typeof platformSettings.$inferSelect;
+export type InsertPlatformSetting = z.infer<typeof insertPlatformSettingSchema>;
+export type NotificationChannel = typeof notificationChannels.$inferSelect;
+export type InsertNotificationChannel = z.infer<typeof insertNotificationChannelSchema>;
+export type CompanyEmailSettings = typeof companyEmailSettings.$inferSelect;
+export type InsertCompanyEmailSettings = z.infer<typeof insertCompanyEmailSettingsSchema>;
+export type SystemNotification = typeof systemNotifications.$inferSelect;
+export type InsertSystemNotification = z.infer<typeof insertSystemNotificationSchema>;
 
 export const brandingSettingsSchema = z.object({
   logo: z.string().max(500).optional(),

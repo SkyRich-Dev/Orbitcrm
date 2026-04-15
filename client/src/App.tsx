@@ -34,6 +34,7 @@ import AdminTenantsPage from "@/pages/admin/tenants";
 import AdminPlansPage from "@/pages/admin/plans";
 import AdminSubscriptionsPage from "@/pages/admin/subscriptions";
 import AdminStaffPage from "@/pages/admin/staff";
+import AdminConfigPage from "@/pages/admin/config";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function Router() {
@@ -69,6 +70,7 @@ function AdminRouter() {
       <Route path="/admin/staff" component={AdminStaffPage} />
       <Route path="/admin/plans" component={AdminPlansPage} />
       <Route path="/admin/subscriptions" component={AdminSubscriptionsPage} />
+      <Route path="/admin/config" component={AdminConfigPage} />
       <Route component={NotFound} />
     </Switch>
   );

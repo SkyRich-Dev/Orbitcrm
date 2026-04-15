@@ -4,9 +4,11 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
-import { pool } from "./db";
+import { pool, db } from "./db";
 import { z } from "zod";
-import { loginSchema, registerSchema, brandingSettingsSchema, homepageSettingsSchema, subdomainSchema } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
+import { loginSchema, registerSchema, brandingSettingsSchema, homepageSettingsSchema, subdomainSchema,
+  platformSettings, notificationChannels, companyEmailSettings, systemNotifications, subscriptionPlans, companies } from "@shared/schema";
 import { scoreLeads, predictDeals, generateAutomatedTasks, generateInsights } from "./ai-services";
 import { featureAccess, requireFeature, requireModule, requireLimit } from "./feature-access";
 import { stripeService, razorpayService } from "./payment-services";
@@ -2564,6 +2566,216 @@ export async function registerRoutes(
       res.json(logs);
     } catch (err: any) {
       res.status(500).json({ message: "Failed to fetch integration logs" });
+    }
+  });
+
+  app.get("/api/admin/config/settings", requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const rows = await db.select().from(platformSettings).orderBy(platformSettings.category, platformSettings.settingKey);
+      const filtered = category ? rows.filter(r => r.category === category) : rows;
+      const safe = filtered.map(r => ({ ...r, settingValue: r.isSecret && r.settingValue ? "••••••••" : r.settingValue }));
+      res.json(safe);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch platform settings" });
+    }
+  });
+
+  app.put("/api/admin/config/settings", requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const { settings } = req.body as { settings: Array<{ settingKey: string; settingValue: string }> };
+      if (!settings || !Array.isArray(settings)) return res.status(400).json({ message: "Invalid settings payload" });
+      for (const s of settings) {
+        if (s.settingValue === "••••••••") continue;
+        await db.update(platformSettings)
+          .set({ settingValue: s.settingValue, updatedAt: new Date() })
+          .where(eq(platformSettings.settingKey, s.settingKey));
+      }
+      res.json({ success: true, message: "Settings updated" });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  app.get("/api/admin/config/notifications", requireSuperAdmin, async (_req: Request, res: Response) => {
+    try {
+      const channels = await db.select().from(notificationChannels).orderBy(notificationChannels.channel);
+      res.json(channels);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch notification channels" });
+    }
+  });
+
+  app.put("/api/admin/config/notifications/:channel", requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const { channel } = req.params;
+      const { enabled, provider, config } = req.body;
+      const [updated] = await db.update(notificationChannels)
+        .set({ enabled: enabled ?? false, provider: provider ?? null, config: config ?? null, updatedAt: new Date() })
+        .where(eq(notificationChannels.channel, channel))
+        .returning();
+      if (!updated) return res.status(404).json({ message: "Channel not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to update notification channel" });
+    }
+  });
+
+  app.get("/api/admin/config/system-notifications", requireSuperAdmin, async (_req: Request, res: Response) => {
+    try {
+      const notifs = await db.select().from(systemNotifications).orderBy(desc(systemNotifications.createdAt)).limit(50);
+      res.json(notifs);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch system notifications" });
+    }
+  });
+
+  app.post("/api/admin/config/system-notifications", requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const { title, message: msg, type, targetAudience, targetCompanyId, expiresAt } = req.body;
+      if (!title || !msg) return res.status(400).json({ message: "Title and message are required" });
+      const [notif] = await db.insert(systemNotifications).values({
+        title, message: msg, type: type || "info", targetAudience: targetAudience || "all",
+        targetCompanyId: targetCompanyId || null, expiresAt: expiresAt ? new Date(expiresAt) : null,
+        createdBy: req.session.userId!, isActive: true,
+      }).returning();
+      res.json(notif);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to create notification" });
+    }
+  });
+
+  app.delete("/api/admin/config/system-notifications/:id", requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await db.delete(systemNotifications).where(eq(systemNotifications.id, id));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to delete notification" });
+    }
+  });
+
+  app.get("/api/admin/config/email-limits", requireSuperAdmin, async (_req: Request, res: Response) => {
+    try {
+      const plans = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.isActive, true)).orderBy(subscriptionPlans.sortOrder);
+      const rawEmailSettings = await db.select().from(companyEmailSettings);
+      const safeEmailSettings = rawEmailSettings.map(s => ({ ...s, smtpPassword: s.smtpPassword ? "••••••••" : null }));
+      const companies_list = await db.select({ id: companies.id, name: companies.name }).from(companies).where(eq(companies.isArchived, false));
+      res.json({ plans, emailSettings: safeEmailSettings, companies: companies_list });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch email limits" });
+    }
+  });
+
+  app.get("/api/admin/config/company-email/:companyId", requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      if (isNaN(companyId)) return res.status(400).json({ message: "Invalid company ID" });
+      const [settings] = await db.select().from(companyEmailSettings).where(eq(companyEmailSettings.companyId, companyId));
+      if (settings) {
+        settings.smtpPassword = settings.smtpPassword ? "••••••••" : null;
+      }
+      res.json(settings || null);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch company email settings" });
+    }
+  });
+
+  const emailSettingsSchema = z.object({
+    enabled: z.boolean().optional(),
+    smtpHost: z.string().max(255).optional().nullable(),
+    smtpPort: z.number().int().min(1).max(65535).optional().nullable(),
+    smtpUsername: z.string().max(255).optional().nullable(),
+    smtpPassword: z.string().max(255).optional().nullable(),
+    fromAddress: z.string().email().max(255).optional().nullable().or(z.literal("")),
+    fromName: z.string().max(255).optional().nullable(),
+    encryption: z.enum(["none", "tls", "ssl"]).optional().nullable(),
+  });
+
+  app.put("/api/admin/config/company-email/:companyId", requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      if (isNaN(companyId)) return res.status(400).json({ message: "Invalid company ID" });
+      const parsed = emailSettingsSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid email settings", errors: parsed.error.flatten() });
+      const { enabled, smtpHost, smtpPort, smtpUsername, smtpPassword, fromAddress, fromName, encryption } = parsed.data;
+      const [existing] = await db.select().from(companyEmailSettings).where(eq(companyEmailSettings.companyId, companyId));
+      if (existing) {
+        const updateData: any = { enabled, smtpHost, smtpPort, smtpUsername, fromAddress, fromName, encryption, updatedAt: new Date() };
+        if (smtpPassword && smtpPassword !== "••••••••") updateData.smtpPassword = smtpPassword;
+        const [updated] = await db.update(companyEmailSettings).set(updateData).where(eq(companyEmailSettings.companyId, companyId)).returning();
+        res.json(updated);
+      } else {
+        const [created] = await db.insert(companyEmailSettings).values({
+          companyId, enabled: enabled ?? false, smtpHost, smtpPort: smtpPort || 587,
+          smtpUsername, smtpPassword, fromAddress, fromName, encryption: encryption || "tls",
+        }).returning();
+        res.json(created);
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to update company email settings" });
+    }
+  });
+
+  app.get("/api/company/email-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const companyId = req.session.companyId!;
+      const [settings] = await db.select().from(companyEmailSettings).where(eq(companyEmailSettings.companyId, companyId));
+      if (settings) {
+        settings.smtpPassword = settings.smtpPassword ? "••••••••" : null;
+      }
+      res.json(settings || null);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch email settings" });
+    }
+  });
+
+  app.put("/api/company/email-settings", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user || (user.role !== "company_admin" && user.role !== "super_admin")) {
+        return res.status(403).json({ message: "Only company admins can update email settings" });
+      }
+      const companyId = req.session.companyId!;
+      const parsed = emailSettingsSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid email settings", errors: parsed.error.flatten() });
+      const { enabled, smtpHost, smtpPort, smtpUsername, smtpPassword, fromAddress, fromName, encryption } = parsed.data;
+      const [existing] = await db.select().from(companyEmailSettings).where(eq(companyEmailSettings.companyId, companyId));
+      if (existing) {
+        const updateData: any = { enabled, smtpHost, smtpPort, smtpUsername, fromAddress, fromName, encryption, updatedAt: new Date() };
+        if (smtpPassword && smtpPassword !== "••••••••") updateData.smtpPassword = smtpPassword;
+        const [updated] = await db.update(companyEmailSettings).set(updateData).where(eq(companyEmailSettings.companyId, companyId)).returning();
+        updated.smtpPassword = updated.smtpPassword ? "••••••••" : null;
+        res.json(updated);
+      } else {
+        const [created] = await db.insert(companyEmailSettings).values({
+          companyId, enabled: enabled ?? false, smtpHost, smtpPort: smtpPort || 587,
+          smtpUsername, smtpPassword, fromAddress, fromName, encryption: encryption || "tls",
+        }).returning();
+        created.smtpPassword = created.smtpPassword ? "••••••••" : null;
+        res.json(created);
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to update email settings" });
+    }
+  });
+
+  app.get("/api/system-notifications/active", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const companyId = req.session.companyId!;
+      const now = new Date();
+      const notifs = await db.select().from(systemNotifications)
+        .where(eq(systemNotifications.isActive, true))
+        .orderBy(desc(systemNotifications.createdAt));
+      const filtered = notifs.filter(n => {
+        if (n.expiresAt && n.expiresAt < now) return false;
+        if (n.targetAudience === "all") return true;
+        if (n.targetAudience === "specific" && n.targetCompanyId === companyId) return true;
+        return false;
+      });
+      res.json(filtered);
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to fetch notifications" });
     }
   });
 
