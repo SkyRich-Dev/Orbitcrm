@@ -353,9 +353,9 @@ export default function DealsPage() {
       id: String(d.id),
       columnId: String(d.stageId),
       title: d.title,
-      subtitle: d.status,
+      subtitle: d.status ?? undefined,
       value: Number(d.value || 0),
-      badge: d.status,
+      badge: d.status ?? undefined,
       meta: d.expectedCloseDate
         ? `Close: ${new Date(d.expectedCloseDate).toLocaleDateString()}`
         : undefined,

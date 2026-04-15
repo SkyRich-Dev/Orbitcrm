@@ -435,7 +435,7 @@ export const insertPaymentTransactionSchema = createInsertSchema(paymentTransact
 export const insertFeatureUsageSchema = createInsertSchema(featureUsage).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type Company = typeof companies.$inferSelect;
-export type InsertCompany = z.infer<typeof insertCompanySchema>;
+export type InsertCompany = typeof companies.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type PipelineStage = typeof pipelineStages.$inferSelect;
@@ -477,7 +477,7 @@ export type CompanyFeatureOverride = typeof companyFeatureOverrides.$inferSelect
 export type InsertCompanyFeatureOverride = z.infer<typeof insertCompanyFeatureOverrideSchema>;
 
 export type IntegrationApp = typeof integrationApps.$inferSelect;
-export type InsertIntegrationApp = z.infer<typeof insertIntegrationAppSchema>;
+export type InsertIntegrationApp = typeof integrationApps.$inferInsert;
 export type CompanyIntegration = typeof companyIntegrations.$inferSelect;
 export type InsertCompanyIntegration = z.infer<typeof insertCompanyIntegrationSchema>;
 export type IntegrationLog = typeof integrationLogs.$inferSelect;

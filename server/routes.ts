@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import rateLimit from "express-rate-limit";
+import path from "path";
 import { storage } from "./storage";
 import { pool, db } from "./db";
 import { z } from "zod";
@@ -33,6 +34,15 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
   const [hashedPassword, salt] = stored.split(".");
   const buf = (await scryptAsync(supplied, salt, 64)) as Buffer;
   return timingSafeEqual(Buffer.from(hashedPassword, "hex"), buf);
+}
+
+function getRouteParam(req: Request, key: string): string {
+  const value = req.params[key];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function getRouteParamNumber(req: Request, key: string): number {
+  return parseInt(getRouteParam(req, key), 10);
 }
 
 async function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -136,7 +146,7 @@ export async function registerRoutes(
   app.use("/api/", apiLimiter);
 
   app.get("/download/developer-document", (_req: Request, res: Response) => {
-    const filePath = new URL("../SkyRich_Orbit_CRM_Developer_Document.docx", import.meta.url).pathname;
+    const filePath = path.resolve(process.cwd(), "SkyRich_Orbit_CRM_Developer_Document.docx");
     res.download(filePath, "SkyRich_Orbit_CRM_Developer_Document.docx");
   });
 
@@ -991,7 +1001,7 @@ export async function registerRoutes(
 
   app.patch("/api/ai/automation-rules/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const { name, triggerType, conditions, actions, isActive } = req.body;
       const rule = await storage.updateAutomationRule(id, req.session.companyId!, {
         name, triggerType, conditions, actions, isActive,
@@ -1006,7 +1016,7 @@ export async function registerRoutes(
 
   app.delete("/api/ai/automation-rules/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       await storage.deleteAutomationRule(id, req.session.companyId!);
       res.json({ ok: true });
     } catch (err: any) {
@@ -1027,7 +1037,7 @@ export async function registerRoutes(
 
   app.patch("/api/ai/insights/:id/read", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const insight = await storage.markInsightRead(id, req.session.companyId!);
       if (!insight) return res.status(404).json({ message: "Insight not found" });
       res.json(insight);
@@ -1698,7 +1708,7 @@ export async function registerRoutes(
 
   app.patch("/api/whatsapp/contacts/:id", requireAuth, requireWhatsappEnabled, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const parsed = whatsappContactUpdateSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
@@ -1713,7 +1723,7 @@ export async function registerRoutes(
 
   app.delete("/api/whatsapp/contacts/:id", requireAuth, requireWhatsappEnabled, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       await storage.deleteWhatsappContact(id, req.session.companyId!);
       res.json({ ok: true });
     } catch (err: any) {
@@ -1870,7 +1880,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/tenants/:id", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const company = await storage.getCompany(id);
       if (!company) return res.status(404).json({ message: "Tenant not found" });
       const allUsers = await storage.getAllUsers();
@@ -1886,7 +1896,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/tenants/:id", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const tenantUpdateSchema = z.object({
         name: z.string().min(1).max(200).optional(),
         slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/).optional(),
@@ -1963,7 +1973,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/tenants/:id/archive", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const company = await storage.archiveCompany(id);
       if (!company) return res.status(404).json({ message: "Tenant not found" });
       res.json(company);
@@ -1974,7 +1984,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/tenants/:id/restore", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const company = await storage.restoreCompany(id);
       if (!company) return res.status(404).json({ message: "Tenant not found" });
       res.json(company);
@@ -1985,7 +1995,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/tenants/:id/subscription", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const subUpdateSchema = z.object({
         planId: z.number().int().positive().optional(),
         status: z.enum(["trial", "active", "cancelled", "expired"]).optional(),
@@ -2011,7 +2021,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/tenants/:id/staff", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = parseInt(req.params.id);
+      const companyId = getRouteParamNumber(req, "id");
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ message: "Tenant not found" });
 
@@ -2050,8 +2060,8 @@ export async function registerRoutes(
 
   app.patch("/api/admin/tenants/:id/staff/:userId", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = parseInt(req.params.id);
-      const userId = parseInt(req.params.userId);
+      const companyId = getRouteParamNumber(req, "id");
+      const userId = getRouteParamNumber(req, "userId");
 
       const user = await storage.getUser(userId);
       if (!user || user.companyId !== companyId) return res.status(404).json({ message: "Staff member not found" });
@@ -2078,7 +2088,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/tenants/:id", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       await storage.deleteCompany(id);
       res.json({ success: true });
     } catch (err: any) {
@@ -2120,7 +2130,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/plans/:id", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const parsed = planBodySchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
       const updated = await storage.updateSubscriptionPlan(id, parsed.data);
@@ -2134,7 +2144,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/plans/:id", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       await storage.deleteSubscriptionPlan(id);
       res.json({ success: true });
     } catch (err: any) {
@@ -2176,7 +2186,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/subscriptions/:id", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const subUpdateSchema = z.object({
         planId: z.number().int().positive().optional(),
         status: z.enum(["trial", "active", "cancelled", "expired"]).optional(),
@@ -2213,7 +2223,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/modules/:id", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const moduleUpdateSchema = z.object({
         moduleName: z.string().min(1).optional(),
         moduleDescription: z.string().optional(),
@@ -2261,7 +2271,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/package-features/:planId", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const planId = parseInt(req.params.planId);
+      const planId = getRouteParamNumber(req, "planId");
       const pkgFeatures = await storage.getPackageFeatures(planId);
       res.json(pkgFeatures);
     } catch (err: any) {
@@ -2271,7 +2281,7 @@ export async function registerRoutes(
 
   app.put("/api/admin/package-features/:planId", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const planId = parseInt(req.params.planId);
+      const planId = getRouteParamNumber(req, "planId");
       const schema = z.array(z.object({
         featureId: z.number().int().positive(),
         isEnabled: z.boolean(),
@@ -2299,7 +2309,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/company-features/:companyId", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = parseInt(req.params.companyId);
+      const companyId = getRouteParamNumber(req, "companyId");
       const featureMap = await featureAccess.getCompanyFeatureMap(companyId);
       const overrides = await storage.getCompanyFeatureOverrides(companyId);
       res.json({ ...featureMap, overrides });
@@ -2310,7 +2320,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/company-features/:companyId", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = parseInt(req.params.companyId);
+      const companyId = getRouteParamNumber(req, "companyId");
       const schema = z.object({
         featureId: z.number().int().positive(),
         isEnabled: z.boolean(),
@@ -2335,8 +2345,8 @@ export async function registerRoutes(
 
   app.delete("/api/admin/company-features/:companyId/:featureId", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = parseInt(req.params.companyId);
-      const featureId = parseInt(req.params.featureId);
+      const companyId = getRouteParamNumber(req, "companyId");
+      const featureId = getRouteParamNumber(req, "featureId");
       await storage.deleteCompanyFeatureOverride(companyId, featureId);
       featureAccess.invalidateCache(companyId);
       res.json({ success: true });
@@ -2455,7 +2465,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Only admins can update integrations" });
       }
 
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const existing = await storage.getCompanyIntegration(id, companyId);
       if (!existing) {
         return res.status(404).json({ message: "Integration connection not found" });
@@ -2497,7 +2507,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Only admins can disconnect integrations" });
       }
 
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const existing = await storage.getCompanyIntegration(id, companyId);
       if (!existing) {
         return res.status(404).json({ message: "Integration connection not found" });
@@ -2529,7 +2539,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Only admins can trigger syncs" });
       }
 
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       const existing = await storage.getCompanyIntegration(id, companyId);
       if (!existing) {
         return res.status(404).json({ message: "Integration connection not found" });
@@ -2608,7 +2618,7 @@ export async function registerRoutes(
 
   app.put("/api/admin/config/notifications/:channel", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const { channel } = req.params;
+      const channel = getRouteParam(req, "channel");
       const { enabled, provider, config } = req.body;
       const [updated] = await db.update(notificationChannels)
         .set({ enabled: enabled ?? false, provider: provider ?? null, config: config ?? null, updatedAt: new Date() })
@@ -2647,7 +2657,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/config/system-notifications/:id", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = getRouteParamNumber(req, "id");
       await db.delete(systemNotifications).where(eq(systemNotifications.id, id));
       res.json({ success: true });
     } catch (err: any) {
@@ -2669,7 +2679,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/config/company-email/:companyId", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = parseInt(req.params.companyId);
+      const companyId = getRouteParamNumber(req, "companyId");
       if (isNaN(companyId)) return res.status(400).json({ message: "Invalid company ID" });
       const [settings] = await db.select().from(companyEmailSettings).where(eq(companyEmailSettings.companyId, companyId));
       if (settings) {
@@ -2694,7 +2704,7 @@ export async function registerRoutes(
 
   app.put("/api/admin/config/company-email/:companyId", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
-      const companyId = parseInt(req.params.companyId);
+      const companyId = getRouteParamNumber(req, "companyId");
       if (isNaN(companyId)) return res.status(400).json({ message: "Invalid company ID" });
       const parsed = emailSettingsSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid email settings", errors: parsed.error.flatten() });

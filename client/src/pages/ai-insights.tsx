@@ -78,9 +78,9 @@ export default function AiInsightsPage() {
     prediction: "text-indigo-500",
   };
 
-  const priorityVariant = (p: string) => {
-    if (p === "high" || p === "critical") return "destructive" as const;
-    if (p === "medium") return "default" as const;
+  const severityVariant = (severity: string) => {
+    if (severity === "high" || severity === "critical") return "destructive" as const;
+    if (severity === "medium" || severity === "warning") return "default" as const;
     return "secondary" as const;
   };
 
@@ -153,8 +153,9 @@ export default function AiInsightsPage() {
         ) : (
           <div className="space-y-3">
             {insights.map((insight) => {
-              const Icon = typeIcons[insight.type] || Lightbulb;
-              const color = typeColors[insight.type] || "text-muted-foreground";
+              const insightKind = insight.insightType || "recommendation";
+              const Icon = typeIcons[insightKind] || Lightbulb;
+              const color = typeColors[insightKind] || "text-muted-foreground";
               return (
                 <Card key={insight.id} data-testid={`card-insight-${insight.id}`}>
                   <CardContent className="py-4">
@@ -165,8 +166,8 @@ export default function AiInsightsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <h4 className="text-sm font-semibold">{insight.title}</h4>
-                          <Badge variant={priorityVariant(insight.priority || "low")} className="text-xs">
-                            {insight.priority}
+                          <Badge variant={severityVariant(insight.severity || "info")} className="text-xs capitalize">
+                            {insight.severity || "info"}
                           </Badge>
                           {insight.isRead ? (
                             <CheckCircle2 className="w-3 h-3 text-green-500" />
@@ -175,15 +176,6 @@ export default function AiInsightsPage() {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">{insight.description}</p>
-                        {insight.metadata && typeof insight.metadata === "object" && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {Object.entries(insight.metadata as Record<string, any>).slice(0, 4).map(([k, v]) => (
-                              <Badge key={k} variant="outline" className="text-xs">
-                                {k}: {String(v)}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </CardContent>
