@@ -234,9 +234,10 @@ function PaymentGatewaysTab() {
 
 function NotificationsTab() {
   const { toast } = useToast();
-  const { data: channels = [], isLoading } = useQuery<NotificationChannel[]>({
+  const { data: channelsRaw, isLoading } = useQuery<NotificationChannel[] | null>({
     queryKey: ["/api/admin/config/notifications"],
   });
+  const channels = channelsRaw ?? [];
 
   const updateMutation = useMutation({
     mutationFn: async ({ channel, data }: { channel: string; data: Partial<NotificationChannel> }) => {
@@ -421,14 +422,16 @@ function SystemNotificationsTab() {
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState({ title: "", message: "", type: "info", targetAudience: "all", targetCompanyId: "", expiresAt: "" });
 
-  const { data: notifs = [], isLoading } = useQuery<SystemNotification[]>({
+  const { data: notifsRaw, isLoading } = useQuery<SystemNotification[] | null>({
     queryKey: ["/api/admin/config/system-notifications"],
   });
+  const notifs = notifsRaw ?? [];
 
-  const { data: companiesList = [] } = useQuery<{ id: number; name: string }[]>({
+  const { data: companiesRaw } = useQuery<{ id: number; name: string }[] | null>({
     queryKey: ["/api/admin/tenants"],
-    select: (data: any[]) => data.map((c: any) => ({ id: c.id, name: c.name })),
+    select: (data: any) => Array.isArray(data) ? data.map((c: any) => ({ id: c.id, name: c.name })) : [],
   });
+  const companiesList = companiesRaw ?? [];
 
   const createMutation = useMutation({
     mutationFn: async () => {
